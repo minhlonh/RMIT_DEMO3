@@ -181,3 +181,77 @@ insert into public.scam_warnings (title, description, severity, prevention_tips)
  'A caller claims you are linked to a crime and demands a transfer to a "safe account".',
  'high',
  'Authorities never handle cases by phone. Hang up and tell a relative or the local police.');
+
+ create table if not exists public.user_credits (
+  user_id uuid primary key references auth.users(id) on delete cascade,
+  free_used int not null default 0,
+  paid_credits int not null default 0
+);
+
+create table if not exists public.orders (
+  id uuid primary key default gen_random_uuid(),
+  code text unique not null,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  amount int not null,
+  credits int not null,
+  status text not null default 'pending',
+  created_at timestamptz not null default now(),
+  paid_at timestamptz
+);
+
+-- Bật RLS và không tạo policy: chỉ server (service role) mới đọc/ghi được
+alter table public.user_credits enable row level security;
+alter table public.orders enable row level security;
+
+-- Trừ 1 lượt (ưu tiên lượt miễn phí). Trả về true nếu trừ được.
+create or replace function public.consume_credit(p_user uuid, p_free_limit int)
+returns boolean
+language plpgsql
+security definer
+as $$
+begin
+  insert into public.user_credits(user_id) values (p_user)
+  on conflict (user_id) do nothing;
+
+  update public.user_credits
+     set free_used = free_used + 1
+   where user_id = p_user and free_used < p_free_limit;
+  if found then return true; end if;
+
+  update public.user_credits
+     set paid_credits = paid_credits - 1
+   where user_id = p_user and paid_credits > 0;
+  return found;
+end;
+$$;
+
+-- Đánh dấu đơn đã thanh toán và cộng lượt (chạy 1 lần duy nhất cho mỗi đơn)
+create or replace function public.mark_order_paid(p_code text, p_amount int)
+returns boolean
+language plpgsql
+security definer
+as $$
+declare
+  o public.orders;
+begin
+  update public.orders
+     set status = 'paid', paid_at = now()
+   where code = p_code and status = 'pending' and amount <= p_amount
+  returning * into o;
+
+  if o.id is null then
+    return false;
+  end if;
+
+  insert into public.user_credits(user_id, paid_credits)
+  values (o.user_id, o.credits)
+  on conflict (user_id)
+  do update set paid_credits = public.user_credits.paid_credits + o.credits;
+
+  return true;
+end;
+$$;
+
+-- Chặn client gọi trực tiếp hai hàm này
+revoke execute on function public.consume_credit(uuid, int) from public, anon, authenticated;
+revoke execute on function public.mark_order_paid(text, int) from public, anon, authenticated;
