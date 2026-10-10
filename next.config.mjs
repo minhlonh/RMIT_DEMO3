@@ -1,6 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  reactStrictMode: true,
+  // Cấu hình Next.js của bạn ở đây (nếu có)
 };
 
-module.exports = nextConfig;
+export default nextConfig;
