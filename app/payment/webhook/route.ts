@@ -3,7 +3,8 @@ import { admin } from "@/lib/server";
 
 // SePay gọi vào đây khi có tiền vào tài khoản
 export async function POST(req: Request) {
-  if (req.headers.get("authorization") !== `Apikey ${process.env.SEPAY_API_KEY}`) {
+  const apiKey = process.env.SEPAY_API_KEY;
+  if (!apiKey || req.headers.get("authorization") !== `Apikey ${apiKey}`) {
     return NextResponse.json({ success: false }, { status: 401 });
   }
 
