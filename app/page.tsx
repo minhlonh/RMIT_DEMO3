@@ -149,37 +149,3 @@ export default function Page() {
     </FamilyProvider>
   );
 }
-
-"use client";
-
-import { useCredit } from "@/hooks/useCredit";
-import Paywall from "@/components/Paywall";
-
-export default function MyFeature() {
-  const { consume, showPaywall, setShowPaywall, accessToken } = useCredit();
-
-  async function handleUseFeature() {
-    const allowed = await consume();
-    if (!allowed) return; // hết lượt -> popup thanh toán đã hiện
-
-    // ===== Code tính năng cũ của bạn đặt ở đây =====
-    // ví dụ: gửi tin nhắn, lưu kỷ niệm, gọi AI...
-  }
-
-  return (
-    <>
-      <button onClick={handleUseFeature}>Dùng tính năng</button>
-
-      {showPaywall && (
-        <Paywall
-          accessToken={accessToken}
-          onClose={() => setShowPaywall(false)}
-          onPaid={() => {
-            setShowPaywall(false);
-            // thanh toán xong, user bấm lại nút để dùng tiếp
-          }}
-        />
-      )}
-    </>
-  );
-}

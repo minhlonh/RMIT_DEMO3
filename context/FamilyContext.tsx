@@ -88,6 +88,7 @@ interface FamilyContextValue {
   paywallOpen: boolean;
   closePaywall: () => void;
   upgrade: () => void;
+  activatePremium: () => void;
 }
 
 const Ctx = createContext<FamilyContextValue | null>(null);
@@ -116,7 +117,8 @@ export function FamilyProvider({ children }: { children: ReactNode }) {
     const u = readLS<number>(KEYS.usage, 0);
     usageRef.current = u;
     setUsageCount(u);
-    const p = readLS<boolean>(KEYS.premium, false);
+    // Có backend: Premium chỉ tin vào server (profiles.is_premium), không tin localStorage.
+    const p = supabase ? false : readLS<boolean>(KEYS.premium, false);
     premiumRef.current = p;
     setPremium(p);
     setReady(true);
@@ -321,15 +323,19 @@ export function FamilyProvider({ children }: { children: ReactNode }) {
 
   const closePaywall = useCallback(() => setPaywallOpen(false), []);
 
+  // Chỉ dùng cho chế độ demo (không có Supabase). Có backend thì Premium chỉ bật qua thanh toán.
   const upgrade = useCallback(() => {
-    const checkout = process.env.NEXT_PUBLIC_CHECKOUT_URL;
-    if (checkout) {
-      window.location.href = checkout; // is_premium must be set server-side by your payment webhook
-      return;
-    }
-    premiumRef.current = true; // demo unlock when no checkout is configured
+    if (supabase) return;
+    premiumRef.current = true;
     setPremium(true);
     writeLS(KEYS.premium, true);
+    setPaywallOpen(false);
+  }, []);
+
+  // Gọi khi server xác nhận đã nhận tiền (PaywallModal thấy đơn "paid")
+  const activatePremium = useCallback(() => {
+    premiumRef.current = true;
+    setPremium(true);
     setPaywallOpen(false);
   }, []);
 
@@ -345,11 +351,11 @@ export function FamilyProvider({ children }: { children: ReactNode }) {
     family, members, activeMember, setActiveMember: setActiveId,
     createFamily, joinFamily, leaveFamily, addMember, updateMember, removeMember,
     usage: { count: usageCount, limit: FREE_LIMIT, isPremium: premium },
-    consumeCredit, paywallOpen, closePaywall, upgrade,
+    consumeCredit, paywallOpen, closePaywall, upgrade, activatePremium,
   }), [
     ready, synced, lang, setLang, t, user, signInWithEmail, signOut, family, members, activeMember,
     createFamily, joinFamily, leaveFamily, addMember, updateMember, removeMember,
-    usageCount, premium, consumeCredit, paywallOpen, closePaywall, upgrade,
+    usageCount, premium, consumeCredit, paywallOpen, closePaywall, upgrade, activatePremium,
   ]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
